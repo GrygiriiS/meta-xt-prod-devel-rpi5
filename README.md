@@ -1,4 +1,6 @@
-# meta-xt-prod-devel-rpi5
+# meta-xt-prod-devel-rpi5 (SCMI demo)
+
+!!! TBD - use on your own risk !!!
 
 The Xen-Troops RPI 5 Xen demonstration project is intended to demonstrate how RPI 5 can be used
 to run with Xen which includes the following images:
@@ -42,14 +44,15 @@ Build for the driver domain device is based on RPI5 bsp yocto build:
 
 ## Status
 
-This is release 0.2.0. This release supports the following features:
+This is release 0.2.0 (SCMI demo). This release supports the following features:
 
 * Zephyr operated control domain:
   * xen libraries integration that allows control of the other domains.
-  * domd with running OCI containers as Aos services capability.
+  * scmi shell interface for demo purposes.
 * Linux operated driver domain:
-  * controls hardware;
+  * controls hardware (USB, Ethernet, WiFi, NVME);
   * provides PV backends for the domains.
+  * SCMI controls PCI resets and pin-control
 * rpi_5_domd domain
   * zephyr-based domain built on top of zephyr-blinky sample;
   * GPIO device passedthrough to the domain to control onboard LED;
@@ -68,6 +71,10 @@ This is release 0.2.0. This release supports the following features:
 Testing pvnet connection instruction:
 [linux_pv_domu testing](https://github.com/xen-troops/meta-xt-rpi5/wiki/RPI5-build-Linux-domain#test)
 
+## Wiki
+Link to the wiki pages:
+[wiki](https://github.com/xen-troops/meta-xt-rpi5/wiki)
+
 ## System Requirements
 
 Below dependencies have to be satisfied before start building project:
@@ -83,7 +90,7 @@ Below dependencies have to be satisfied before start building project:
 ```
 mkdir <my_build_dir>
 cd <my_build_dir>
-curl -O https://raw.githubusercontent.com/xen-troops/meta-xt-prod-devel-rpi5/master/rpi5.yaml
+curl -O https://raw.githubusercontent.com/GrygiriiS/meta-xt-prod-devel-rpi5/rpi5_scmi_demo/rpi5.yaml
 moulin rpi5.yaml
 ninja
 ```
@@ -91,12 +98,19 @@ ninja
 The build process generates two images:
 
 * SD-card image to be used for boot and by the Zephyr Dom0 `zephyr-dom0-xt` application;
-* USB-flash image to be used as **rootfs** by Linux operated driver domain.
+* USB-flash/NVME image to be used as **rootfs** by Linux operated driver domain.
 
 For build system with rootfs domd on nvme storage:
 
 ```
 moulin rpi5.yaml --DOMD_ROOT nvme
+ninja
+```
+
+For build system with WiFi support in domd:
+
+```
+moulin rpi5.yaml --ENABLE_WIFI=yes
 ninja
 ```
 
@@ -169,7 +183,7 @@ xen //Xen-Troops: Xen image
 xenpolicy //Xen-Troops: Xen xenpolicy image
 zephyr.bin //Xen-Troops: Zephyr Dom0 `zephyr-dom0-xt` application
 Image.gz // Xen-Troops: RPI5 Linux DomD kernel with Xen support enabled
-armstub8-2712.bin   //Xen-Troops: OPTEE
+armstub8-2712.bin   //Xen-Troops: OPTEE/SCMI
 bcm2712-raspberrypi5-domd.dtb //Xen-Troops: Linux DomD Partial DT
 bcm2712-raspberrypi5-mmc.dtbo //Xen-Troops: Xen overlay for System (RPI5) DT to enable mmc in DomD
 bcm2712-raspberrypi5-usb.dtbo //Xen-Troops: Xen overlay for System (RPI5) DT to enable USB in DomD
@@ -865,6 +879,114 @@ uart:~$ xu destroy 5
 domain:4 destroyed
 ```
 
+## DomD Start WiFi example
+
+Switch to console (please press "Ctrl + A" 6 times) and try below commands.
+
+```
+(XEN) root@raspberrypi5-domd:~# ifconfig wlan0 up
+
+(XEN) root@raspberrypi5-domd:~# iw dev wlan0 info
+(XEN) Interface wlan0
+(XEN)   ifindex 3
+(XEN)   wdev 0x1
+(XEN)   addr b8:27:eb:74:f2:6c
+(XEN)   type managed
+(XEN)   wiphy 0
+(XEN)   channel 34 (5170 MHz), width: 20 MHz, center1: 5170 MHz
+(XEN)   txpower 31.00 dBm
+
+(XEN) root@raspberrypi5-domd:~# iw dev wlan0 scan | grep SSID
+...
+(XEN)   SSID: Terrace
+...
+
+(XEN) root@raspberrypi5-domd:~# iw dev wlan0 connect "Terrace"
+(XEN) root@raspberrypi5-domd:~# iw dev wlan0 info
+(XEN) Interface wlan0
+(XEN)   ifindex 3
+(XEN)   wdev 0x1
+(XEN)   addr x:x:x:x:x:x
+(XEN)   ssid Terrace
+(XEN)   type managed
+(XEN)   wiphy 0
+(XEN)   channel 11 (2462 MHz), width: 20 MHz, center1: 2462 MHz
+(XEN)   txpower 31.00 dBm
+
+(XEN) root@raspberrypi5-domd:~# udhcpc -i wlan0
+(XEN) udhcpc: started, v1.36.1
+(XEN) Dropped protocol specifier '.udhcpc' from 'wlan0.udhcpc'. Using 'wlan0' (ifindex=3).
+(XEN) udhcpc: broadcasting discover
+(XEN) udhcpc: broadcasting select for 10.1.32.95, server 10.1.32.1
+(XEN) udhcpc: lease of 10.1.32.95 obtained from 10.1.32.1, lease time 1800
+(XEN) /etc/udhcpc.d/50default: Adding DNS 10.1.32.1
+
+(XEN) root@raspberrypi5-domd:~# ping 8.8.8.8
+(XEN) PING 8.8.8.8 (8.8.8.8): 56 data bytes
+(XEN) 64 bytes from 8.8.8.8: seq=0 ttl=117 time=37.382 ms
+
+(XEN) root@raspberrypi5-domd:~# ping www.google.com
+(XEN) PING www.google.com (142.250.203.132): 56 data bytes
+(XEN) 64 bytes from 142.250.203.132: seq=0 ttl=117 time=15.784 ms
+
+```
+
+## Zephyr Dom0 SCMI shell example
+
+Run below commands from Dom0 console:
+
+```
+	uart:~$ arm_scmi base
+	base - SCMI Base proto commands.
+	Subcommands:
+	  revision           : SCMI Base get revision info
+	                      Usage: arm_scmi base revision
+
+	  discover_agent     : SCMI Base discover an agent
+	                      Usage: arm_scmi base discover_agent [agent_id]
+
+	  device_permission  : SCMI Base set an agent permissions to access device
+	                      Usage: arm_scmi base discover_agent <agent_id> <device_id>
+	                      <allow := 0|1>
+
+	  reset_agent_cfg    : SCMI Base reset an agent configuration
+	                      Usage: arm_scmi base reset_agent_cfg <agent_id>
+	                      <reset_perm := 0|1>
+
+	uart:~$ arm_scmi base revision
+	ARM SCMI base protocol v0002.0000
+	  vendor        :EPAM
+	  subvendor     :
+	  fw version    :0x40
+	  protocols     :2
+	  num_agents    :8
+
+	uart:~$ arm_scmi reset
+	reset - SCMI Reset proto commands.
+	Subcommands:
+	  revision   : SCMI Reset proto show revision information
+	              Usage: arm_scmi reset revision
+
+	  list       : SCMI Reset domains list
+	              Usage: arm_scmi reset list
+
+	  info       : SCMI Reset domain show info
+	              Usage: arm_scmi reset info <domain_id>
+
+	  assert     : SCMI Reset domain assert
+	              Usage: arm_scmi reset assert <domain_id>
+
+	  deassert   : SCMI Reset domain de-assert
+	              Usage: arm_scmi reset deassert <domain_id>
+
+	  autoreset  : SCMI Reset domain Autonomous reset
+	              Usage: arm_scmi reset autoreset <domain_id>
+
+        uart:~$ arm_scmi reset revision
+	ARM SCMI Reset protocol version 0x0001.0000 num_domains:4
+```
+
+
 ## Bootlog
 
 The boot log will look like below when RPI5 is booted:
@@ -1225,10 +1347,6 @@ The following list shows the list of features already implemented and plans for 
  * configure Linux Kernel (in DomD) to use set resets and pinctrl;
  * add wlan support to DomD. This requires SCMI to share pinctrl access.
 
-## Wiki
-Link to the wiki pages:
-[wiki](https://github.com/xen-troops/meta-xt-rpi5/wiki)
-
 ## Known issues
 1. Sometime rpi boot firmware files are not deployed during build. In this case rpi-bootfiles, rpi-config and
 rpi-cmdline recipes should be cleaned with yocto command:
@@ -1254,3 +1372,6 @@ ninja
 |        |           |   devices enabled                                 |
 |        |           | - add vchan utilities to the DomD                 |
 |        |           | - XSM security labeld configuration               |
+| v0.2.0 |           | - SCMI demo                                       |
+|(SCMI   |           | - DomD WiFi support                               |
+| demo)  |           |                                                   |
